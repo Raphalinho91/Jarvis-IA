@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import axios from "axios";
 import { logger } from "../../utils/logger";
 import saveProfileToDatabase from "./whatsappServices";
+import getChatGptResponse from "../openai/openai";
 
 interface SendMessageRequest {
   to: string;
@@ -37,54 +38,6 @@ interface WebhookBody {
 }
 
 async function whatsappRoutes(app: FastifyInstance): Promise<void> {
-  // Route to send a custom message to WhatsApp
-  app.post(
-    "/sendMessage",
-    async (
-      request: FastifyRequest<{ Body: SendMessageRequest }>,
-      reply: FastifyReply
-    ) => {
-      const { to, message } = request.body;
-      const resData = {
-        status: false,
-        answer: "",
-      };
-
-      try {
-        const options = {
-          method: "POST",
-          url: "https://graph.facebook.com/v19.0/264460340081018/messages",
-          headers: {
-            Authorization: `Bearer ${process.env.SECRET_KEY}`,
-            "Content-Type": "application/json",
-          },
-          data: {
-            messaging_product: "whatsapp",
-            to: to,
-            type: "text",
-            text: {
-              body: message,
-            },
-          },
-        };
-
-        const response = await axios(options);
-        resData.status = true;
-        resData.answer = response.data;
-        return reply.status(200).send(resData);
-      } catch (error) {
-        logger.error("Error during request:", error);
-        resData.status = false;
-        if (error instanceof Error) {
-          resData.answer = error.message;
-        } else {
-          resData.answer = String(error);
-        }
-        return reply.status(500).send(resData);
-      }
-    }
-  );
-
   // Webhook verification endpoint
   app.get(
     "/webhook",
@@ -145,9 +98,12 @@ async function whatsappRoutes(app: FastifyInstance): Promise<void> {
           // Assuming you have a function to save profile info to the database
           await saveProfileToDatabase(profileName, profilePhoneNumber);
 
+          // Get ChatGPT response
+          const chatGptResponse = await getChatGptResponse(msgBody);
+
           reply.status(200).send({
             status: true,
-            response: `Le message que vous venez d'envoyer est : ${msgBody}`,
+            response: chatGptResponse,
             from: fromNumber,
             profileName: profileName,
             profilePhoneNumber: profilePhoneNumber,
@@ -157,6 +113,54 @@ async function whatsappRoutes(app: FastifyInstance): Promise<void> {
         }
       } else {
         reply.status(404).send();
+      }
+    }
+  );
+
+  // Route to send a custom message to WhatsApp
+  app.post(
+    "/sendMessage",
+    async (
+      request: FastifyRequest<{ Body: SendMessageRequest }>,
+      reply: FastifyReply
+    ) => {
+      const { to, message } = request.body;
+      const resData = {
+        status: false,
+        answer: "",
+      };
+
+      try {
+        const options = {
+          method: "POST",
+          url: "https://graph.facebook.com/v19.0/264460340081018/messages",
+          headers: {
+            Authorization: `Bearer ${process.env.SECRET_KEY}`,
+            "Content-Type": "application/json",
+          },
+          data: {
+            messaging_product: "whatsapp",
+            to: to,
+            type: "text",
+            text: {
+              body: message,
+            },
+          },
+        };
+
+        const response = await axios(options);
+        resData.status = true;
+        resData.answer = response.data;
+        return reply.status(200).send(resData);
+      } catch (error) {
+        logger.error("Error during request:", error);
+        resData.status = false;
+        if (error instanceof Error) {
+          resData.answer = error.message;
+        } else {
+          resData.answer = String(error);
+        }
+        return reply.status(500).send(resData);
       }
     }
   );
