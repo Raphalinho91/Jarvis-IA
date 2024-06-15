@@ -6,7 +6,7 @@ const openai = new OpenAI({
 
 async function getChatGptResponse(prompt: string): Promise<string> {
   try {
-    const response = await openai.createChatCompletion({
+    const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
         {
@@ -17,7 +17,7 @@ async function getChatGptResponse(prompt: string): Promise<string> {
       ],
     });
 
-    return response.data.choices[0].message.content;
+    return response.choices[0].message.content;
   } catch (error) {
     console.error("Error:", error);
     throw error;
