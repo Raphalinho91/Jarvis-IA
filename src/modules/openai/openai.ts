@@ -6,7 +6,7 @@ const openai = new OpenAI({
 
 async function getChatGptResponse(prompt: string): Promise<string> {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await openai.createChatCompletion({
       model: "gpt-3.5-turbo",
       messages: [
         {
