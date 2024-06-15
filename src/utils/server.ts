@@ -1,6 +1,6 @@
 import fastify, { FastifyInstance, FastifyLoggerOptions } from "fastify";
 import { logger } from "./logger";
-import { registerRoutes } from "../modules/whatsappRoutes";
+import { registerRoutes } from "../modules/whatsapp/whatsappRoutes";
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app: FastifyInstance = fastify({
