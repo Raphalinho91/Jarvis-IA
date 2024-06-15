@@ -101,6 +101,31 @@ async function whatsappRoutes(app: FastifyInstance): Promise<void> {
           // Get ChatGPT response
           const chatGptResponse = await getChatGptResponse(msgBody);
 
+          // Send the ChatGPT response via WhatsApp
+          const options = {
+            method: "POST",
+            url: "https://graph.facebook.com/v19.0/264460340081018/messages",
+            headers: {
+              Authorization: `Bearer ${process.env.SECRET_KEY}`,
+              "Content-Type": "application/json",
+            },
+            data: {
+              messaging_product: "whatsapp",
+              to: fromNumber,
+              type: "text",
+              text: {
+                body: chatGptResponse,
+              },
+            },
+          };
+
+          try {
+            const response = await axios(options);
+            console.info("Message sent successfully:", response.data);
+          } catch (error) {
+            console.error("Error sending message:", error);
+          }
+
           reply.status(200).send({
             status: true,
             response: chatGptResponse,
