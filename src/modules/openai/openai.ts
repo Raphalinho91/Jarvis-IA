@@ -1,3 +1,4 @@
+import { logger } from "../../utils/logger";
 const OpenAI = require("openai");
 
 const openai = new OpenAI({
@@ -17,6 +18,7 @@ async function getChatGptResponse(prompt: string): Promise<string> {
       ],
     });
 
+    logger.info(response.choices[0].message.content)
     return response.choices[0].message.content;
   } catch (error) {
     console.error("Error:", error);
