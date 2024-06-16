@@ -58,12 +58,12 @@ async function verifyWebhook(
 
   if (mode && token) {
     if (mode === "subscribe" && token === process.env.MYTOKEN) {
-      reply.status(200).send(challenge);
+      return reply.status(200).send(challenge);
     } else {
-      reply.status(403).send();
+      return reply.status(403).send();
     }
   } else {
-    reply.status(400).send();
+    return reply.status(400).send();
   }
 }
 
@@ -80,94 +80,119 @@ async function handleIncomingMessage(changeValue: ChangeValue) {
   logger.info(`Profile name: ${profileName}`);
   logger.info(`Profile phone number: ${profilePhoneNumber}`);
 
-  await saveProfileToDatabase(profileName, profilePhoneNumber);
-
-  if (!userConversations[fromNumber]) {
-    userConversations[fromNumber] = [
-      {
-        role: "system",
-        content: "You are ChatGPT, a large language model trained by OpenAI.",
-      },
-    ];
-  }
-
-  userConversations[fromNumber].push({ role: "user", content: msgBody });
-
-  const chatGptResponse = await getChatGptResponse(
-    userConversations[fromNumber]
-  );
-
-  userConversations[fromNumber].push({
-    role: "assistant",
-    content: chatGptResponse,
-  });
-
-  logger.info({ userConversations });
-
-  const profileId = await getProfileIdByPhoneNumber(profilePhoneNumber);
-  if (profileId === null) {
-    throw new Error(
-      `Profile ID not found for phone number: ${profilePhoneNumber}`
-    );
-  }
-
-  await saveUserConversationToDatabase(
-    profileId,
-    profilePhoneNumber,
-    userConversations[fromNumber],
-    profileName
-  );
-
-  const options = {
-    method: "POST",
-    url: "https://graph.facebook.com/v19.0/264460340081018/messages",
-    headers: {
-      Authorization: `Bearer ${process.env.SECRET_KEY}`,
-      "Content-Type": "application/json",
-    },
-    data: {
-      messaging_product: "whatsapp",
-      to: fromNumber,
-      type: "text",
-      text: {
-        body: chatGptResponse,
-      },
-    },
-  };
-
   try {
-    const response = await axios(options);
-    console.info("Message sent successfully:", response.data);
-  } catch (error) {
-    console.error("Error sending message:", error);
-  }
+    await saveProfileToDatabase(profileName, profilePhoneNumber);
 
-  return {
-    status: true,
-    response: chatGptResponse,
-    from: fromNumber,
-    profileName: profileName,
-    profilePhoneNumber: profilePhoneNumber,
-  };
+    if (!userConversations[fromNumber]) {
+      userConversations[fromNumber] = [
+        {
+          role: "system",
+          content: "You are ChatGPT, a large language model trained by OpenAI.",
+        },
+      ];
+    }
+
+    userConversations[fromNumber].push({ role: "user", content: msgBody });
+
+    const chatGptResponse = await getChatGptResponse(
+      userConversations[fromNumber]
+    );
+
+    userConversations[fromNumber].push({
+      role: "assistant",
+      content: chatGptResponse,
+    });
+
+    logger.info({ userConversations });
+
+    const profileId = await getProfileIdByPhoneNumber(profilePhoneNumber);
+    if (profileId === null) {
+      throw new Error(
+        `Profile ID not found for phone number: ${profilePhoneNumber}`
+      );
+    }
+
+    await saveUserConversationToDatabase(
+      profileId,
+      profilePhoneNumber,
+      userConversations[fromNumber],
+      profileName
+    );
+
+    const options = {
+      method: "POST",
+      url: "https://graph.facebook.com/v19.0/264460340081018/messages",
+      headers: {
+        Authorization: `Bearer ${process.env.SECRET_KEY}`,
+        "Content-Type": "application/json",
+      },
+      data: {
+        messaging_product: "whatsapp",
+        to: fromNumber,
+        type: "text",
+        text: {
+          body: chatGptResponse,
+        },
+      },
+    };
+
+    try {
+      const response = await axios(options);
+      console.info("Message sent successfully:", response.data);
+    } catch (error) {
+      if (error instanceof Error) {
+        logger.error("Error sending message:", error.message);
+      } else {
+        logger.error("Unknown error sending message:", error);
+      }
+    }
+
+    return {
+      status: true,
+      response: chatGptResponse,
+      from: fromNumber,
+      profileName: profileName,
+      profilePhoneNumber: profilePhoneNumber,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error("Error processing incoming message:", error.message);
+      throw new Error(`Failed to process incoming message: ${error.message}`);
+    } else {
+      logger.error("Unknown error processing incoming message:", error);
+      throw new Error("Failed to process incoming message due to an unknown error.");
+    }
+  }
 }
 
 async function handleWebhook(
   request: FastifyRequest<{ Body: WebhookBody }>,
   reply: FastifyReply
 ) {
-  const bodyParam = request.body;
-  logger.info(bodyParam.object);
-  logger.info(bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]);
+  try {
+    logger.info(request.headers);
+    const bodyParam = request.body;
+    logger.info(bodyParam.object);
+    logger.info(bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]);
 
-  if (
-    bodyParam.object &&
-    bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
-  ) {
-    const changeValue = bodyParam.entry[0].changes[0].value;
-    const response = await handleIncomingMessage(changeValue);
-    reply.status(200).send(response);
-  } else {
-    reply.status(404).send();
+    if (
+      bodyParam.object &&
+      bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
+    ) {
+      const changeValue = bodyParam.entry[0].changes[0].value;
+      const response = await handleIncomingMessage(changeValue);
+      reply.status(200).send(response);
+    } else {
+      reply.status(404).send();
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error("Error handling webhook:", error.message);
+      reply.status(500).send({ error: `Error handling webhook: ${error.message}` });
+    } else {
+      logger.error("Unknown error handling webhook:", error);
+      reply.status(500).send({ error: "Error handling webhook due to an unknown error." });
+    }
   }
 }
 

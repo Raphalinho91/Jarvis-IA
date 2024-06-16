@@ -19,17 +19,20 @@ export async function saveProfileToDatabase(name: string, phoneNumber: string) {
     if (existingProfiles.length === 0) {
       await db
         .insert(profiles)
-        .values({
-          name,
-          phoneNumber,
-        })
+        .values({ name, phoneNumber })
         .execute();
-      logger.info("Profile saved to database.");
+      logger.info(`Profile saved to database: ${name}, ${phoneNumber}`);
     } else {
-      logger.info("Profile already exists in the database.");
+      logger.info(`Profile already exists in the database: ${phoneNumber}`);
     }
   } catch (error) {
-    logger.error("Error saving profile to database:", error);
+    if (error instanceof Error) {
+      logger.error("Error saving profile to database:", error);
+      throw new Error(`Failed to save profile: ${error.message}`);
+    } else {
+      logger.error("Unknown error saving profile to database:", error);
+      throw new Error("Failed to save profile due to an unknown error.");
+    }
   }
 }
 
@@ -40,7 +43,6 @@ export async function saveUserConversationToDatabase(
   name: string
 ) {
   try {
-    // Recherche d'une conversation existante avec le même numéro de téléphone
     const existingConversations = await db
       .select()
       .from(conversations)
@@ -48,11 +50,9 @@ export async function saveUserConversationToDatabase(
       .execute();
 
     if (existingConversations.length > 0) {
-      // Si une conversation existe, mettez à jour les messages
       const existingConversation = existingConversations[0];
       if (existingConversation.conversation) {
         const updatedConversation = {
-          ...existingConversation,
           conversation: JSON.stringify([
             ...JSON.parse(existingConversation.conversation),
             ...conversation,
@@ -60,14 +60,15 @@ export async function saveUserConversationToDatabase(
         };
         await db
           .update(conversations)
-          .set({ conversation: updatedConversation.conversation })
+          .set(updatedConversation)
           .where(eq(conversations.id, existingConversation.id))
           .execute();
+        logger.info(`Conversation updated for phone number: ${phoneNumber}`);
       } else {
         logger.error("Existing conversation has null messages.");
+        throw new Error("Existing conversation has null messages.");
       }
     } else {
-      // Si aucune conversation n'existe, insérez une nouvelle entrée
       const conversationData = {
         profileId,
         phoneNumber,
@@ -75,25 +76,42 @@ export async function saveUserConversationToDatabase(
         name,
       };
       await db.insert(conversations).values(conversationData).execute();
+      logger.info(`New conversation saved for phone number: ${phoneNumber}`);
     }
   } catch (error) {
-    logger.error("Error save conversation:", error);
-    throw error;
+    if (error instanceof Error) {
+      logger.error("Error saving conversation:", error);
+      throw new Error(`Failed to save conversation: ${error.message}`);
+    } else {
+      logger.error("Unknown error saving conversation:", error);
+      throw new Error("Failed to save conversation due to an unknown error.");
+    }
   }
 }
 
 export async function getProfileIdByPhoneNumber(
   phoneNumber: string
 ): Promise<number | null> {
-  const result = await db
-    .select({ id: profiles.id })
-    .from(profiles)
-    .where(eq(profiles.phoneNumber, phoneNumber))
-    .execute();
+  try {
+    const result = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.phoneNumber, phoneNumber))
+      .execute();
 
-  if (result.length > 0) {
-    return result[0].id;
-  } else {
-    return null;
+    if (result.length > 0) {
+      return result[0].id;
+    } else {
+      logger.warn(`No profile found for phone number: ${phoneNumber}`);
+      return null;
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error("Error retrieving profile ID:", error);
+      throw new Error(`Failed to retrieve profile ID: ${error.message}`);
+    } else {
+      logger.error("Unknown error retrieving profile ID:", error);
+      throw new Error("Failed to retrieve profile ID due to an unknown error.");
+    }
   }
 }
