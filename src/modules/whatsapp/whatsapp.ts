@@ -38,6 +38,10 @@ interface WebhookBody {
   }>;
 }
 
+const userConversations: {
+  [key: string]: Array<{ role: string; content: string }>;
+} = {};
+
 async function verifyWebhook(
   request: FastifyRequest<{ Querystring: WebhookQuery }>,
   reply: FastifyReply
@@ -74,7 +78,27 @@ async function handleIncomingMessage(changeValue: ChangeValue) {
 
   await saveProfileToDatabase(profileName, profilePhoneNumber);
 
-  const chatGptResponse = await getChatGptResponse(msgBody);
+  if (!userConversations[fromNumber]) {
+    userConversations[fromNumber] = [
+      {
+        role: "system",
+        content: "You are ChatGPT, a large language model trained by OpenAI.",
+      },
+    ];
+  }
+
+  userConversations[fromNumber].push({ role: "user", content: msgBody });
+
+  const chatGptResponse = await getChatGptResponse(
+    userConversations[fromNumber]
+  );
+
+  userConversations[fromNumber].push({
+    role: "assistant",
+    content: chatGptResponse,
+  });
+
+  logger.info({ userConversations });
 
   const options = {
     method: "POST",
@@ -115,6 +139,8 @@ async function handleWebhook(
 ) {
   const bodyParam = request.body;
   logger.info(JSON.stringify(bodyParam, null, 2));
+  logger.info(bodyParam.object);
+  logger.info(bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]);
 
   if (
     bodyParam.object &&
