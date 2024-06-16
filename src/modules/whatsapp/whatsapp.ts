@@ -1,8 +1,12 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import axios from "axios";
 import { logger } from "../../utils/logger";
-import saveProfileToDatabase from "./whatsappServices";
 import getChatGptResponse from "../openai/openai";
+import {
+  getProfileIdByPhoneNumber,
+  saveProfileToDatabase,
+  saveUserConversationToDatabase,
+} from "./whatsappServices";
 
 interface WebhookQuery {
   "hub.mode": string;
@@ -100,6 +104,20 @@ async function handleIncomingMessage(changeValue: ChangeValue) {
 
   logger.info({ userConversations });
 
+  const profileId = await getProfileIdByPhoneNumber(profilePhoneNumber);
+  if (profileId === null) {
+    throw new Error(
+      `Profile ID not found for phone number: ${profilePhoneNumber}`
+    );
+  }
+
+  await saveUserConversationToDatabase(
+    profileId,
+    profilePhoneNumber,
+    userConversations[fromNumber],
+    profileName
+  );
+
   const options = {
     method: "POST",
     url: "https://graph.facebook.com/v19.0/264460340081018/messages",
@@ -138,7 +156,6 @@ async function handleWebhook(
   reply: FastifyReply
 ) {
   const bodyParam = request.body;
-  logger.info(JSON.stringify(bodyParam, null, 2));
   logger.info(bodyParam.object);
   logger.info(bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]);
 
