@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import whatsappRoutes from "./whatsapp";
+import validateHostname from "../../utils/middleware";
 
 // Route racine
 async function rootRouteHandler(request: FastifyRequest, reply: FastifyReply) {
@@ -15,6 +16,9 @@ async function rootRouteHandler(request: FastifyRequest, reply: FastifyReply) {
 }
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
+  // Register the hostname validation middleware
+  app.addHook("preHandler", validateHostname);
+
   // Enregistrer les routes WhatsApp
   try {
     app.register(whatsappRoutes, { prefix: "/whatsapp" });

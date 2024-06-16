@@ -42,6 +42,14 @@ interface WebhookBody {
   }>;
 }
 
+interface Headers {
+  "true-client-ip"?: string;
+  host?: string;
+  "user-agent"?: string;
+  "cf-connecting-ip"?: string;
+  "x-forwarded-for"?: string;
+}
+
 const userConversations: {
   [key: string]: Array<{ role: string; content: string }>;
 } = {};
@@ -67,21 +75,20 @@ async function verifyWebhook(
   }
 }
 
-async function handleIncomingMessage(changeValue: ChangeValue) {
+async function handleIncomingMessage(
+  changeValue: ChangeValue,
+  headers: Headers
+) {
   const message = changeValue.messages[0];
   const contact = changeValue.contacts[0];
+  const addressIp = headers["true-client-ip"] ?? "Unknown IP";
   const { body: msgBody } = message.text;
   const { from: fromNumber } = message;
   const { name: profileName } = contact.profile;
   const { wa_id: profilePhoneNumber } = contact;
 
-  logger.info(`Received message: ${msgBody}`);
-  logger.info(`From number: ${fromNumber}`);
-  logger.info(`Profile name: ${profileName}`);
-  logger.info(`Profile phone number: ${profilePhoneNumber}`);
-
   try {
-    await saveProfileToDatabase(profileName, profilePhoneNumber);
+    await saveProfileToDatabase(profileName, profilePhoneNumber, addressIp);
 
     if (!userConversations[fromNumber]) {
       userConversations[fromNumber] = [
@@ -102,8 +109,6 @@ async function handleIncomingMessage(changeValue: ChangeValue) {
       role: "assistant",
       content: chatGptResponse,
     });
-
-    logger.info({ userConversations });
 
     const profileId = await getProfileIdByPhoneNumber(profilePhoneNumber);
     if (profileId === null) {
@@ -160,7 +165,9 @@ async function handleIncomingMessage(changeValue: ChangeValue) {
       throw new Error(`Failed to process incoming message: ${error.message}`);
     } else {
       logger.error("Unknown error processing incoming message:", error);
-      throw new Error("Failed to process incoming message due to an unknown error.");
+      throw new Error(
+        "Failed to process incoming message due to an unknown error."
+      );
     }
   }
 }
@@ -170,7 +177,7 @@ async function handleWebhook(
   reply: FastifyReply
 ) {
   try {
-    logger.info(request.headers);
+    const headers = request.headers as Headers;
     const bodyParam = request.body;
     logger.info(bodyParam.object);
     logger.info(bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]);
@@ -180,7 +187,7 @@ async function handleWebhook(
       bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
     ) {
       const changeValue = bodyParam.entry[0].changes[0].value;
-      const response = await handleIncomingMessage(changeValue);
+      const response = await handleIncomingMessage(changeValue, headers);
       reply.status(200).send(response);
     } else {
       reply.status(404).send();
@@ -188,10 +195,14 @@ async function handleWebhook(
   } catch (error) {
     if (error instanceof Error) {
       logger.error("Error handling webhook:", error.message);
-      reply.status(500).send({ error: `Error handling webhook: ${error.message}` });
+      reply
+        .status(500)
+        .send({ error: `Error handling webhook: ${error.message}` });
     } else {
       logger.error("Unknown error handling webhook:", error);
-      reply.status(500).send({ error: "Error handling webhook due to an unknown error." });
+      reply
+        .status(500)
+        .send({ error: "Error handling webhook due to an unknown error." });
     }
   }
 }

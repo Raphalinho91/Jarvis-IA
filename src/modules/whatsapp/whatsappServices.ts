@@ -8,7 +8,11 @@ interface ConversationMessage {
   content: string;
 }
 
-export async function saveProfileToDatabase(name: string, phoneNumber: string) {
+export async function saveProfileToDatabase(
+  name: string,
+  phoneNumber: string,
+  addressIp: string
+) {
   try {
     const existingProfiles = await db
       .select()
@@ -19,7 +23,7 @@ export async function saveProfileToDatabase(name: string, phoneNumber: string) {
     if (existingProfiles.length === 0) {
       await db
         .insert(profiles)
-        .values({ name, phoneNumber })
+        .values({ name, phoneNumber, addressIp })
         .execute();
       logger.info(`Profile saved to database: ${name}, ${phoneNumber}`);
     } else {
@@ -37,7 +41,7 @@ export async function saveProfileToDatabase(name: string, phoneNumber: string) {
 }
 
 export async function saveUserConversationToDatabase(
-  profileId: number,
+  profileId: string,
   phoneNumber: string,
   conversation: ConversationMessage[],
   name: string
@@ -91,7 +95,7 @@ export async function saveUserConversationToDatabase(
 
 export async function getProfileIdByPhoneNumber(
   phoneNumber: string
-): Promise<number | null> {
+): Promise<string | null> {
   try {
     const result = await db
       .select({ id: profiles.id })
