@@ -52,7 +52,7 @@ interface Headers {
 }
 
 const userConversations: {
-  [key: string]: Array<{ role: string; userName: string; content: string }>;
+  [key: string]: Array<{ role: string; nameOfUser: string; content: string }>;
 } = {};
 
 async function verifyWebhook(
@@ -105,7 +105,7 @@ async function handleIncomingMessage(
 
     userConversations[fromNumber].push({
       role: "user",
-      userName: profileName,
+      nameOfUser: profileName,
       content: msgBody,
     });
 
@@ -117,7 +117,7 @@ async function handleIncomingMessage(
 
     userConversations[fromNumber].push({
       role: "assistant",
-      userName: "assistant",
+      nameOfUser: "assistant",
       content: chatGptResponse,
     });
 
@@ -160,7 +160,7 @@ async function handleDeleteConversation(
   const deletionResponse = "La conversation a été supprimée.";
   userConversations[fromNumber].push({
     role: "assistant",
-    userName: "assistant",
+    nameOfUser: "assistant",
     content: deletionResponse,
   });
 
@@ -179,7 +179,7 @@ function initializeUserConversation(fromNumber: string) {
   userConversations[fromNumber] = [
     {
       role: "system",
-      userName: "ChatGPT",
+      nameOfUser: "ChatGPT",
       content: "You are ChatGPT, a large language model trained by OpenAI.",
     },
   ];
@@ -199,6 +199,7 @@ async function checkConversationLengthAndSummarize(
       ...userConversations[fromNumber],
       {
         role: "system",
+        nameOfUser: "ChatGPT",
         content:
           "La conversation ci-dessus est trop longue. Résumez-la en une seule phrase.",
       },
@@ -209,16 +210,15 @@ async function checkConversationLengthAndSummarize(
     userConversations[fromNumber] = [
       {
         role: "system",
-        userName: "ChatGPT",
-
+        nameOfUser: "ChatGPT",
         content: "You are ChatGPT, a large language model trained by OpenAI.",
       },
       {
         role: "system",
-        userName: "ChatGPT",
+        nameOfUser: "ChatGPT",
         content: `Résumé de la conversation précédente : ${summaryResponse}`,
       },
-      { role: "user", userName: profileName, content: msgBody },
+      { role: "user", nameOfUser: profileName, content: msgBody },
     ];
   }
 }
