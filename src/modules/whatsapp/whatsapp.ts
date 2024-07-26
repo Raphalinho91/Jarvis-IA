@@ -52,7 +52,7 @@ interface Headers {
 }
 
 const userConversations: {
-  [key: string]: Array<{ role: string; content: string }>;
+  [key: string]: Array<{ role: string; userName: string; content: string }>;
 } = {};
 
 async function verifyWebhook(
@@ -92,27 +92,40 @@ async function handleIncomingMessage(
     await saveProfileToDatabase(profileName, profilePhoneNumber, addressIp);
 
     if (msgBody.trim().toLowerCase() === "supprime la conversation") {
-      return await handleDeleteConversation(fromNumber, profilePhoneNumber, profileName);
+      return await handleDeleteConversation(
+        fromNumber,
+        profilePhoneNumber,
+        profileName
+      );
     }
 
     if (!userConversations[fromNumber]) {
       initializeUserConversation(fromNumber);
     }
 
-    userConversations[fromNumber].push({ role: profileName, content: msgBody });
+    userConversations[fromNumber].push({
+      role: "user",
+      userName: profileName,
+      content: msgBody,
+    });
 
     await checkConversationLengthAndSummarize(fromNumber, profileName, msgBody);
 
-    const chatGptResponse = await getChatGptResponse(userConversations[fromNumber]);
+    const chatGptResponse = await getChatGptResponse(
+      userConversations[fromNumber]
+    );
 
     userConversations[fromNumber].push({
       role: "assistant",
+      userName: "assistant",
       content: chatGptResponse,
     });
 
     const profileId = await getProfileIdByPhoneNumber(profilePhoneNumber);
     if (profileId === null) {
-      throw new Error(`Profile ID not found for phone number: ${profilePhoneNumber}`);
+      throw new Error(
+        `Profile ID not found for phone number: ${profilePhoneNumber}`
+      );
     }
 
     await saveUserConversationToDatabase(
@@ -136,13 +149,18 @@ async function handleIncomingMessage(
   }
 }
 
-async function handleDeleteConversation(fromNumber: string, profilePhoneNumber: string, profileName: string) {
+async function handleDeleteConversation(
+  fromNumber: string,
+  profilePhoneNumber: string,
+  profileName: string
+) {
   await deleteUserConversationFromDatabase(profilePhoneNumber);
   initializeUserConversation(fromNumber);
 
   const deletionResponse = "La conversation a été supprimée.";
   userConversations[fromNumber].push({
     role: "assistant",
+    userName: "assistant",
     content: deletionResponse,
   });
 
@@ -161,12 +179,17 @@ function initializeUserConversation(fromNumber: string) {
   userConversations[fromNumber] = [
     {
       role: "system",
+      userName: "ChatGPT",
       content: "You are ChatGPT, a large language model trained by OpenAI.",
     },
   ];
 }
 
-async function checkConversationLengthAndSummarize(fromNumber: string, profileName: string, msgBody: string) {
+async function checkConversationLengthAndSummarize(
+  fromNumber: string,
+  profileName: string,
+  msgBody: string
+) {
   let conversationLength = userConversations[fromNumber]
     .map((msg) => msg.content)
     .join(" ").length;
@@ -176,7 +199,8 @@ async function checkConversationLengthAndSummarize(fromNumber: string, profileNa
       ...userConversations[fromNumber],
       {
         role: "system",
-        content: "La conversation ci-dessus est trop longue. Résumez-la en une seule phrase.",
+        content:
+          "La conversation ci-dessus est trop longue. Résumez-la en une seule phrase.",
       },
     ];
 
@@ -185,13 +209,16 @@ async function checkConversationLengthAndSummarize(fromNumber: string, profileNa
     userConversations[fromNumber] = [
       {
         role: "system",
+        userName: "ChatGPT",
+
         content: "You are ChatGPT, a large language model trained by OpenAI.",
       },
       {
         role: "system",
+        userName: "ChatGPT",
         content: `Résumé de la conversation précédente : ${summaryResponse}`,
       },
-      { role: profileName, content: msgBody },
+      { role: "user", userName: profileName, content: msgBody },
     ];
   }
 }
@@ -228,7 +255,9 @@ function handleError(logMessage: string, error: unknown) {
     throw new Error(`Failed to process incoming message: ${error.message}`);
   } else {
     logger.error(logMessage, error);
-    throw new Error("Failed to process incoming message due to an unknown error.");
+    throw new Error(
+      "Failed to process incoming message due to an unknown error."
+    );
   }
 }
 
@@ -242,7 +271,10 @@ async function handleWebhook(
     logger.info(bodyParam.object);
     logger.info(bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]);
 
-    if (bodyParam.object && bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
+    if (
+      bodyParam.object &&
+      bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
+    ) {
       const changeValue = bodyParam.entry[0].changes[0].value;
       const response = await handleIncomingMessage(changeValue, headers);
       reply.status(200).send(response);
@@ -254,7 +286,6 @@ async function handleWebhook(
     reply.status(500).send({ error: `Error handling webhook: ${error}` });
   }
 }
-
 
 async function whatsappRoutes(app: FastifyInstance): Promise<void> {
   app.get("/webhook", verifyWebhook);
