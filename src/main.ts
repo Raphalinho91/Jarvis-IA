@@ -4,12 +4,9 @@ import { logger } from "./utils/logger";
 import { buildServer } from "./utils/server";
 import { db } from "./db";
 import { FastifyInstance } from "fastify";
+import { redactSensitiveInfo } from "./utils/redact";
 
-async function gracefulShutdown({
-  app,
-}: {
-  app: FastifyInstance;
-}) {
+async function gracefulShutdown({ app }: { app: FastifyInstance }) {
   await app.close();
 }
 
@@ -30,7 +27,7 @@ async function main() {
 
   const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
 
-  logger.debug(env, "using env");
+  logger.debug(redactSensitiveInfo(env), "using env");
 
   for (const signal of signals) {
     process.on(signal, () => {

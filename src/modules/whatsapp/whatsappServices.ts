@@ -25,9 +25,9 @@ export async function saveProfileToDatabase(
         .insert(profiles)
         .values({ name, phoneNumber, addressIp })
         .execute();
-      logger.info(`Profile saved to database: ${name}, ${phoneNumber}`);
+      // logger.info(`Profile saved to database: ${name}, ${phoneNumber}`);
     } else {
-      logger.info(`Profile already exists in the database: ${phoneNumber}`);
+      // logger.info(`Profile already exists in the database: ${phoneNumber}`);
     }
   } catch (error) {
     if (error instanceof Error) {
@@ -67,7 +67,7 @@ export async function saveUserConversationToDatabase(
           .set(updatedConversation)
           .where(eq(conversations.id, existingConversation.id))
           .execute();
-        logger.info(`Conversation updated for phone number: ${phoneNumber}`);
+        // logger.info(`Conversation updated for phone number: ${phoneNumber}`);
       } else {
         logger.error("Existing conversation has null messages.");
         throw new Error("Existing conversation has null messages.");
@@ -80,7 +80,7 @@ export async function saveUserConversationToDatabase(
         name,
       };
       await db.insert(conversations).values(conversationData).execute();
-      logger.info(`New conversation saved for phone number: ${phoneNumber}`);
+      // logger.info(`New conversation saved for phone number: ${phoneNumber}`);
     }
   } catch (error) {
     if (error instanceof Error) {

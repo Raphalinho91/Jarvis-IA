@@ -1,13 +1,17 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import axios from "axios";
 import { logger } from "../../utils/logger";
-import getChatGptResponse from "../openai/openai";
+import getChatGptResponse from "../openai/generateMessage";
 import {
   deleteUserConversationFromDatabase,
   getProfileIdByPhoneNumber,
   saveProfileToDatabase,
   saveUserConversationToDatabase,
 } from "./whatsappServices";
+import { db2 } from "../../db/database2";
+import getChatGptResumeForDatabase from "../openai/resumeResponseDatabase";
+import determineThemeOfMessage from "../openai/determineTheme";
+import generateRequeteSql from "../openai/generateRequeteSql";
 
 interface WebhookQuery {
   "hub.mode": string;
@@ -52,7 +56,7 @@ interface Headers {
 }
 
 const userConversations: {
-  [key: string]: Array<{ role: string; content: string }>;
+  [key: string]: Array<{ role: string; nameOfUser: string; content: string }>;
 } = {};
 
 async function verifyWebhook(
@@ -92,27 +96,111 @@ async function handleIncomingMessage(
     await saveProfileToDatabase(profileName, profilePhoneNumber, addressIp);
 
     if (msgBody.trim().toLowerCase() === "supprime la conversation") {
-      return await handleDeleteConversation(fromNumber, profilePhoneNumber, profileName);
+      return await handleDeleteConversation(
+        fromNumber,
+        profilePhoneNumber,
+        profileName
+      );
     }
 
     if (!userConversations[fromNumber]) {
       initializeUserConversation(fromNumber);
     }
 
-    userConversations[fromNumber].push({ role: profileName, content: msgBody });
+    userConversations[fromNumber].push({
+      role: "user",
+      nameOfUser: profileName,
+      content: msgBody,
+    });
+
+    logger.fatal({ userConversations });
 
     await checkConversationLengthAndSummarize(fromNumber, profileName, msgBody);
 
-    const chatGptResponse = await getChatGptResponse(userConversations[fromNumber]);
+    const subjectIsProperty = await determineThemeOfMessage([
+      {
+        role: "user",
+        content: msgBody,
+      },
+    ]);
+
+    logger.fatal({ subjectIsProperty });
+
+    if (subjectIsProperty === "true") {
+      const requeteSql = await generateRequeteSql([
+        {
+          role: "user",
+          content: msgBody,
+        },
+      ]);
+      logger.fatal({ requeteSql });
+
+      await db2.query(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"
+      );
+      const result = await db2.query(requeteSql);
+      const resultString = result.rows
+        .map((row) => JSON.stringify(row))
+        .join("\n");
+      const queryResultObject = {
+        userMessage: msgBody,
+        requete: requeteSql,
+        responseOfDatabase: resultString,
+      };
+      logger.info({ queryResultObject });
+      logger.fatal(JSON.stringify(queryResultObject));
+      const resumeOfQueryResultObject = await getChatGptResumeForDatabase([
+        {
+          role: "user",
+          content: JSON.stringify(queryResultObject),
+        },
+      ]);
+      logger.info({ resumeOfQueryResultObject });
+    }
+
+    const chatGptResponse = await getChatGptResponse(
+      userConversations[fromNumber]
+    );
+
+    let responseToSend = chatGptResponse;
+    logger.info({ responseToSend });
+    // if (chatGptResponse.trim().toUpperCase().startsWith("SELECT")) {
+    //   const tables = await db2.query(
+    //     "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"
+    //   );
+    //   logger.info({ tables: tables.rows });
+    //   const result = await db2.query(chatGptResponse);
+    //   logger.info({ result });
+    //   const resultString = result.rows
+    //     .map((row) => JSON.stringify(row))
+    //     .join("\n");
+    //   const queryResultObject = {
+    //     requete: chatGptResponse,
+    //     responseOfDatabase: resultString,
+    //   };
+    //   logger.info({ queryResultObject });
+    //   const summaryResponse = await getChatGptResumeForDatabase([
+    //     {
+    //       role: "user",
+    //       content: JSON.stringify(queryResultObject),
+    //     },
+    //   ]);
+    //   logger.info({ summaryResponse });
+
+    //   responseToSend = summaryResponse;
+    // }
 
     userConversations[fromNumber].push({
       role: "assistant",
-      content: chatGptResponse,
+      nameOfUser: "assistant",
+      content: responseToSend,
     });
 
     const profileId = await getProfileIdByPhoneNumber(profilePhoneNumber);
     if (profileId === null) {
-      throw new Error(`Profile ID not found for phone number: ${profilePhoneNumber}`);
+      throw new Error(
+        `Profile ID not found for phone number: ${profilePhoneNumber}`
+      );
     }
 
     await saveUserConversationToDatabase(
@@ -122,11 +210,11 @@ async function handleIncomingMessage(
       profileName
     );
 
-    await sendMessageToWhatsApp(fromNumber, chatGptResponse);
+    await sendMessageToWhatsApp(fromNumber, responseToSend);
 
     return {
       status: true,
-      response: chatGptResponse,
+      response: responseToSend,
       from: fromNumber,
       profileName: profileName,
       profilePhoneNumber: profilePhoneNumber,
@@ -136,13 +224,18 @@ async function handleIncomingMessage(
   }
 }
 
-async function handleDeleteConversation(fromNumber: string, profilePhoneNumber: string, profileName: string) {
+async function handleDeleteConversation(
+  fromNumber: string,
+  profilePhoneNumber: string,
+  profileName: string
+) {
   await deleteUserConversationFromDatabase(profilePhoneNumber);
   initializeUserConversation(fromNumber);
 
   const deletionResponse = "La conversation a été supprimée.";
   userConversations[fromNumber].push({
     role: "assistant",
+    nameOfUser: "assistant",
     content: deletionResponse,
   });
 
@@ -161,12 +254,18 @@ function initializeUserConversation(fromNumber: string) {
   userConversations[fromNumber] = [
     {
       role: "system",
-      content: "You are ChatGPT, a large language model trained by OpenAI.",
+      nameOfUser: "ChatGPT",
+      content:
+        "You are an expert in all fields, you can and know how to answer all my questions.",
     },
   ];
 }
 
-async function checkConversationLengthAndSummarize(fromNumber: string, profileName: string, msgBody: string) {
+async function checkConversationLengthAndSummarize(
+  fromNumber: string,
+  profileName: string,
+  msgBody: string
+) {
   let conversationLength = userConversations[fromNumber]
     .map((msg) => msg.content)
     .join(" ").length;
@@ -176,7 +275,9 @@ async function checkConversationLengthAndSummarize(fromNumber: string, profileNa
       ...userConversations[fromNumber],
       {
         role: "system",
-        content: "La conversation ci-dessus est trop longue. Résumez-la en une seule phrase.",
+        nameOfUser: "ChatGPT",
+        content:
+          "The conversation above is too long. Make a very short summary of the most important and relevant information.",
       },
     ];
 
@@ -185,13 +286,16 @@ async function checkConversationLengthAndSummarize(fromNumber: string, profileNa
     userConversations[fromNumber] = [
       {
         role: "system",
-        content: "You are ChatGPT, a large language model trained by OpenAI.",
+        nameOfUser: "ChatGPT",
+        content:
+          "You are an expert in all fields, you can and know how to answer all my questions.",
       },
       {
         role: "system",
-        content: `Résumé de la conversation précédente : ${summaryResponse}`,
+        nameOfUser: "ChatGPT",
+        content: `Summary of previous conversation: ${summaryResponse}`,
       },
-      { role: profileName, content: msgBody },
+      { role: "user", nameOfUser: profileName, content: msgBody },
     ];
   }
 }
@@ -216,7 +320,7 @@ async function sendMessageToWhatsApp(to: string, body: string) {
 
   try {
     const response = await axios(options);
-    console.info("Message sent successfully:", response.data);
+    logger.info("Message sent successfully:", response.data);
   } catch (error) {
     handleError("Error sending message:", error);
   }
@@ -228,7 +332,9 @@ function handleError(logMessage: string, error: unknown) {
     throw new Error(`Failed to process incoming message: ${error.message}`);
   } else {
     logger.error(logMessage, error);
-    throw new Error("Failed to process incoming message due to an unknown error.");
+    throw new Error(
+      "Failed to process incoming message due to an unknown error."
+    );
   }
 }
 
@@ -239,10 +345,13 @@ async function handleWebhook(
   try {
     const headers = request.headers as Headers;
     const bodyParam = request.body;
-    logger.info(bodyParam.object);
-    logger.info(bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]);
+    // logger.info(bodyParam.object);
+    // logger.info(bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]);
 
-    if (bodyParam.object && bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
+    if (
+      bodyParam.object &&
+      bodyParam.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
+    ) {
       const changeValue = bodyParam.entry[0].changes[0].value;
       const response = await handleIncomingMessage(changeValue, headers);
       reply.status(200).send(response);
@@ -254,7 +363,6 @@ async function handleWebhook(
     reply.status(500).send({ error: `Error handling webhook: ${error}` });
   }
 }
-
 
 async function whatsappRoutes(app: FastifyInstance): Promise<void> {
   app.get("/webhook", verifyWebhook);
