@@ -180,7 +180,8 @@ function initializeUserConversation(fromNumber: string) {
     {
       role: "system",
       nameOfUser: "ChatGPT",
-      content: "You are ChatGPT, a large language model trained by OpenAI.",
+      content:
+        "You are an expert in all fields, you can and know how to answer all my questions.",
     },
   ];
 }
@@ -201,7 +202,7 @@ async function checkConversationLengthAndSummarize(
         role: "system",
         nameOfUser: "ChatGPT",
         content:
-          "La conversation ci-dessus est trop longue. Résumez-la en une seule phrase.",
+          "The conversation above is too long. Make a very short summary of the most important and relevant information.",
       },
     ];
 
@@ -211,12 +212,13 @@ async function checkConversationLengthAndSummarize(
       {
         role: "system",
         nameOfUser: "ChatGPT",
-        content: "You are ChatGPT, a large language model trained by OpenAI.",
+        content:
+          "You are an expert in all fields, you can and know how to answer all my questions.",
       },
       {
         role: "system",
         nameOfUser: "ChatGPT",
-        content: `Résumé de la conversation précédente : ${summaryResponse}`,
+        content: `Summary of previous conversation: ${summaryResponse}`,
       },
       { role: "user", nameOfUser: profileName, content: msgBody },
     ];

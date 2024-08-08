@@ -4,13 +4,12 @@ import { logger } from "./utils/logger";
 import { buildServer } from "./utils/server";
 import { db } from "./db";
 import { FastifyInstance } from "fastify";
+import { closeMongoDB, connectMongoDB } from "./db/mongodb";
+import { redactSensitiveInfo } from "./utils/redact";
 
-async function gracefulShutdown({
-  app,
-}: {
-  app: FastifyInstance;
-}) {
+async function gracefulShutdown({ app }: { app: FastifyInstance }) {
   await app.close();
+  await closeMongoDB();
 }
 
 async function main() {
@@ -28,9 +27,11 @@ async function main() {
     migrationsFolder: "./migrations",
   });
 
+  await connectMongoDB();
+
   const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
 
-  logger.debug(env, "using env");
+  logger.debug(redactSensitiveInfo(env), "using env");
 
   for (const signal of signals) {
     process.on(signal, () => {

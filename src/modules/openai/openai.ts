@@ -12,6 +12,12 @@ interface Message {
 
 async function getChatGptResponse(messages: Message[]): Promise<string> {
   try {
+    messages.push({
+      role: "system",
+      content:
+        "Please determine if the user's message can be transcribed into an SQL query. If yes, provide the SQL query.",
+    });
+
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: messages,
