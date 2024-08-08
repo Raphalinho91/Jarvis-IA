@@ -16,6 +16,7 @@
 		"fastify-zod": "^1.4.0",
 		"jsonwebtoken": "^9.0.2",
 		"mongodb": "^6.8.0",
+		"mongoose": "^8.5.2",
 		"openai": "^4.51.0",
 		"path": "^0.12.7",
 		"pg": "^8.11.5",

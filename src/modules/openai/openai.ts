@@ -12,10 +12,17 @@ interface Message {
 
 async function getChatGptResponse(messages: Message[]): Promise<string> {
   try {
+    // Append system message to inform about the database and table structure
     messages.push({
       role: "system",
-      content:
-        "Please determine if the user's message can be transcribed into an SQL query. If yes, provide the SQL query.",
+      content: `You have access to a database with a table named "House". The table "House" has the following attributes:
+        - address (string)
+        - size (number, in square feet)
+        - price (number, in USD)
+        - numberOfBedrooms (number)
+        - numberOfBathrooms (number)
+        - description (string, optional)
+      Please determine if the user's message can be transcribed into an SQL query. If yes, provide the SQL query.`,
     });
 
     const response = await openai.chat.completions.create({
