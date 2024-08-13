@@ -8,7 +8,7 @@ interface Message {
 
 async function getChatGptResumeForDatabase(
   messages: Message[],
-  language: string = "fr"
+  language: string
 ): Promise<string> {
   try {
     messages.push({

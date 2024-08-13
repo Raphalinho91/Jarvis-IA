@@ -13,6 +13,7 @@ import getChatGptResumeForDatabase from "../openai/resumeResponseDatabase";
 import determineThemeOfMessage from "../openai/determineTheme";
 import generateRequeteSql from "../openai/generateRequeteSql";
 import generateSimpleMessage from "../openai/generateMessage";
+import determineLanguage from "../openai/determineLanguage";
 
 interface WebhookQuery {
   "hub.mode": string;
@@ -118,6 +119,12 @@ async function handleIncomingMessage(
 
     await checkConversationLengthAndSummarize(fromNumber, profileName, msgBody);
 
+    const languageUser = await determineLanguage([
+      { role: "user", content: msgBody },
+    ]);
+
+    logger.fatal({ languageUser });
+
     const subjectIsProperty = await determineThemeOfMessage([
       { role: "user", content: msgBody },
     ]);
@@ -146,16 +153,18 @@ async function handleIncomingMessage(
       logger.info({ queryResultObject });
       logger.fatal(JSON.stringify(queryResultObject));
 
-      const resumeOfQueryResultObject = await getChatGptResumeForDatabase([
-        { role: "user", content: JSON.stringify(queryResultObject) },
-      ]);
+      const resumeOfQueryResultObject = await getChatGptResumeForDatabase(
+        [{ role: "user", content: JSON.stringify(queryResultObject) }],
+        languageUser
+      );
 
       logger.info({ resumeOfQueryResultObject });
 
       responseToSend = resumeOfQueryResultObject;
     } else {
       const simpleMessage = await generateSimpleMessage(
-        userConversations[fromNumber]
+        userConversations[fromNumber],
+        languageUser
       );
       responseToSend = simpleMessage;
     }
@@ -246,7 +255,7 @@ async function checkConversationLengthAndSummarize(
       },
     ];
 
-    const summaryResponse = await getChatGptResponse(summaryRequest);
+    const summaryResponse = await getChatGptResponse(summaryRequest, "en-us");
 
     userConversations[fromNumber] = [
       {

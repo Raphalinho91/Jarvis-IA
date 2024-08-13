@@ -6,8 +6,16 @@ interface Message {
   content: string;
 }
 
-async function generateSimpleMessage(messages: Message[]): Promise<string> {
+async function generateSimpleMessage(
+  messages: Message[],
+  language: string
+): Promise<string> {
   try {
+    messages.push({
+      role: "system",
+      content: `Answer in this language: ${language}`,
+    });
+
     logger.info({ messages });
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",

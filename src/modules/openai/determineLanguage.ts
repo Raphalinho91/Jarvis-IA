@@ -6,11 +6,11 @@ interface Message {
   content: string;
 }
 
-async function determineThemeOfMessage(messages: Message[]): Promise<string> {
+async function determineLanguage(messages: Message[]): Promise<string> {
   try {
     messages.push({
       role: "system",
-      content: `Is this message related to real estate? to houses? to apartments? to housing? is it a question about real estate, houses, housing, apartments in general? If yes, answer only "true" if no, answer only "false".`,
+      content: `What language is used in this message?  Answer me by giving me only the spoken language, that's all, I want it in format: ISO 639-1 standard.`,
     });
 
     logger.fatal({ messages });
@@ -27,4 +27,4 @@ async function determineThemeOfMessage(messages: Message[]): Promise<string> {
   }
 }
 
-export default determineThemeOfMessage;
+export default determineLanguage;
