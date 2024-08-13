@@ -12,6 +12,7 @@ import { db2 } from "../../db/database2";
 import getChatGptResumeForDatabase from "../openai/resumeResponseDatabase";
 import determineThemeOfMessage from "../openai/determineTheme";
 import generateRequeteSql from "../openai/generateRequeteSql";
+import generateSimpleMessage from "../openai/generateMessage";
 
 interface WebhookQuery {
   "hub.mode": string;
@@ -118,77 +119,46 @@ async function handleIncomingMessage(
     await checkConversationLengthAndSummarize(fromNumber, profileName, msgBody);
 
     const subjectIsProperty = await determineThemeOfMessage([
-      {
-        role: "user",
-        content: msgBody,
-      },
+      { role: "user", content: msgBody },
     ]);
 
     logger.fatal({ subjectIsProperty });
 
+    let responseToSend;
+
     if (subjectIsProperty === "true") {
       const requeteSql = await generateRequeteSql([
-        {
-          role: "user",
-          content: msgBody,
-        },
+        { role: "user", content: msgBody },
       ]);
       logger.fatal({ requeteSql });
 
-      await db2.query(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"
-      );
       const result = await db2.query(requeteSql);
       const resultString = result.rows
         .map((row) => JSON.stringify(row))
         .join("\n");
+
       const queryResultObject = {
         userMessage: msgBody,
         requete: requeteSql,
         responseOfDatabase: resultString,
       };
+
       logger.info({ queryResultObject });
       logger.fatal(JSON.stringify(queryResultObject));
+
       const resumeOfQueryResultObject = await getChatGptResumeForDatabase([
-        {
-          role: "user",
-          content: JSON.stringify(queryResultObject),
-        },
+        { role: "user", content: JSON.stringify(queryResultObject) },
       ]);
+
       logger.info({ resumeOfQueryResultObject });
+
+      responseToSend = resumeOfQueryResultObject;
+    } else {
+      const simpleMessage = await generateSimpleMessage(
+        userConversations[fromNumber]
+      );
+      responseToSend = simpleMessage;
     }
-
-    const chatGptResponse = await getChatGptResponse(
-      userConversations[fromNumber]
-    );
-
-    let responseToSend = chatGptResponse;
-    logger.info({ responseToSend });
-    // if (chatGptResponse.trim().toUpperCase().startsWith("SELECT")) {
-    //   const tables = await db2.query(
-    //     "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"
-    //   );
-    //   logger.info({ tables: tables.rows });
-    //   const result = await db2.query(chatGptResponse);
-    //   logger.info({ result });
-    //   const resultString = result.rows
-    //     .map((row) => JSON.stringify(row))
-    //     .join("\n");
-    //   const queryResultObject = {
-    //     requete: chatGptResponse,
-    //     responseOfDatabase: resultString,
-    //   };
-    //   logger.info({ queryResultObject });
-    //   const summaryResponse = await getChatGptResumeForDatabase([
-    //     {
-    //       role: "user",
-    //       content: JSON.stringify(queryResultObject),
-    //     },
-    //   ]);
-    //   logger.info({ summaryResponse });
-
-    //   responseToSend = summaryResponse;
-    // }
 
     userConversations[fromNumber].push({
       role: "assistant",
@@ -233,11 +203,6 @@ async function handleDeleteConversation(
   initializeUserConversation(fromNumber);
 
   const deletionResponse = "La conversation a été supprimée.";
-  userConversations[fromNumber].push({
-    role: "assistant",
-    nameOfUser: "assistant",
-    content: deletionResponse,
-  });
 
   await sendMessageToWhatsApp(fromNumber, deletionResponse);
 
